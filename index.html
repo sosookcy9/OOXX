@@ -94,9 +94,9 @@ body::after {
 #game { justify-content: space-between; padding: 52px 0 44px; }
 
 .player-area {
-  display: flex; gap: 8px; padding: 10px 14px;
+  display: flex; flex-direction: row; gap: 4px; padding: 10px 8px;
   background: var(--surface); border: 1.5px solid var(--border-soft);
-  border-radius: 22px; min-height: 96px;
+  border-radius: 22px; min-height: 80px;
   align-items: flex-end; justify-content: center;
   width: min(92vw, 360px);
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
@@ -107,7 +107,7 @@ body::after {
 
 /* ── CARD ── */
 .card {
-  width: 46px; height: 76px; border-radius: 13px;
+  width: 33px; height: 58px; border-radius: 9px;
   background: var(--surface); border: 1.5px solid var(--border-soft);
   display: flex; justify-content: center; align-items: center;
   cursor: pointer; position: relative; flex-shrink: 0;
@@ -132,9 +132,9 @@ body::after {
 .card .piece { border-radius: 50%; flex-shrink: 0; }
 .card .piece.p1 { background: radial-gradient(circle at 35% 30%, var(--coral-light), var(--coral)); box-shadow: 0 3px 10px var(--coral-glow); }
 .card .piece.p2 { background: radial-gradient(circle at 35% 30%, var(--indigo-light), var(--indigo)); box-shadow: 0 3px 10px var(--indigo-glow); }
-.card .size-3 { width: 32px; height: 32px; }
-.card .size-2 { width: 21px; height: 21px; }
-.card .size-1 { width: 11px; height: 11px; }
+.card .size-3 { width: 24px; height: 24px; }
+.card .size-2 { width: 16px; height: 16px; }
+.card .size-1 { width: 9px; height: 9px; }
 
 /* ── BOARD ── */
 .board-container {
@@ -339,7 +339,7 @@ function resetGame() {
 // ── HAND ──
 function createHand(player) {
   const el = document.getElementById(`p${player}-hand`);
-  [3,3,2,2,1,1].forEach(size => {
+  [3,3,3,2,2,2,1,1,1].forEach(size => {
     const card = document.createElement("div");
     card.className = `card p${player}-card`;
     const piece = document.createElement("div");
@@ -498,7 +498,7 @@ function showDraw() {
   document.getElementById('winner-glow').style.background='linear-gradient(135deg,var(--coral),var(--indigo))';
   const t=document.getElementById('winner-text');
   t.style.cssText='background:linear-gradient(135deg,var(--coral),var(--indigo));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
-  t.textContent="DRAW";
+  t.textContent="和局";
   document.getElementById('winner-overlay').classList.add('visible');
 }
 
@@ -537,7 +537,6 @@ function easyAiMove() {
   for (const s of sizes) {
     for (let i=0;i<9;i++) {
       if (!canPlace(i,s,2)) continue;
-      const saved=board[i].at(-1);
       board[i].push({player:2,size:s});
       const win=checkWinFor(board,2);
       board[i].pop();
@@ -548,15 +547,11 @@ function easyAiMove() {
   // 2. Block player's immediate win
   for (const s of sizes) {
     for (let i=0;i<9;i++) {
-      if (!canPlace(i,s,1)) continue; // check if p1 could place here
-      const saved=board[i].at(-1);
       board[i].push({player:1,size:s});
       const win=checkWinFor(board,1);
       board[i].pop();
       if (win) {
-        // block it with AI if possible
         if (canPlace(i,s,2)) return {idx:i,size:s};
-        // try any size that blocks
         for (const bs of sizes) {
           if (canPlace(i,bs,2)) return {idx:i,size:bs};
         }
@@ -564,36 +559,54 @@ function easyAiMove() {
     }
   }
 
-  // 3. Gobble threat (50% chance): eat a player piece to create 2-in-a-row
-  if (Math.random()<0.5) {
-    const gobbleMoves=[];
-    for (const s of sizes) {
-      for (let i=0;i<9;i++) {
-        const top=board[i].at(-1);
-        // Must eat a player piece (gobble)
-        if (!top||top.player!==1||s<=top.size) continue;
-        // Simulate placing
-        const orig=[...board[i]];
-        board[i].push({player:2,size:s});
-        // Count how many lines now have 2 AI pieces and no P1 pieces
-        let threat=0;
-        for (const pat of WIN_PATTERNS) {
-          const tops=pat.map(j=>board[j].at(-1));
-          const ai=tops.filter(x=>x&&x.player===2).length;
-          const p1=tops.filter(x=>x&&x.player===1).length;
-          if (ai===2&&p1===0) threat++;
-        }
-        board[i].pop();
-        if (threat>0) gobbleMoves.push({idx:i,size:s,threat});
+  // 3. Build 2-in-a-row (always try, not 50%)
+  const buildMoves=[];
+  for (const s of sizes) {
+    for (let i=0;i<9;i++) {
+      if (!canPlace(i,s,2)) continue;
+      board[i].push({player:2,size:s});
+      let threat=0;
+      for (const pat of WIN_PATTERNS) {
+        const tops=pat.map(j=>board[j].at(-1));
+        const ai=tops.filter(x=>x&&x.player===2).length;
+        const p1=tops.filter(x=>x&&x.player===1).length;
+        if (ai===2&&p1===0) threat++;
       }
-    }
-    if (gobbleMoves.length) {
-      gobbleMoves.sort((a,b)=>b.threat-a.threat);
-      return gobbleMoves[0];
+      board[i].pop();
+      if (threat>0) buildMoves.push({idx:i,size:s,threat});
     }
   }
+  if (buildMoves.length) {
+    buildMoves.sort((a,b)=>b.threat-a.threat);
+    // Pick among top moves (not always best, so player can still win)
+    const top=buildMoves.filter(m=>m.threat===buildMoves[0].threat);
+    return top[Math.floor(Math.random()*top.length)];
+  }
 
-  // 4. Random
+  // 4. Gobble threat: eat a player piece if it helps
+  const gobbleMoves=[];
+  for (const s of sizes) {
+    for (let i=0;i<9;i++) {
+      const top=board[i].at(-1);
+      if (!top||top.player!==1||s<=top.size) continue;
+      board[i].push({player:2,size:s});
+      let threat=0;
+      for (const pat of WIN_PATTERNS) {
+        const tops=pat.map(j=>board[j].at(-1));
+        const ai=tops.filter(x=>x&&x.player===2).length;
+        const p1=tops.filter(x=>x&&x.player===1).length;
+        if (ai===2&&p1===0) threat++;
+      }
+      board[i].pop();
+      if (threat>0) gobbleMoves.push({idx:i,size:s,threat});
+    }
+  }
+  if (gobbleMoves.length) {
+    gobbleMoves.sort((a,b)=>b.threat-a.threat);
+    return gobbleMoves[0];
+  }
+
+  // 5. Random
   const allMoves=[];
   for (const s of sizes) {
     for (let i=0;i<9;i++) {
@@ -629,7 +642,8 @@ function hardAiMove() {
       // If center is free, take it; else take a corner
       const top4 = board[4].at(-1);
       if (!top4 || big.size > top4.size) return {idx:4, size:big.size};
-      for (const corner of [0,2,6,8]) {
+      const corners = [0,2,6,8].sort(()=>Math.random()-0.5);
+      for (const corner of corners) {
         const topC = board[corner].at(-1);
         if (!topC || big.size > topC.size) return {idx:corner, size:big.size};
       }
@@ -672,6 +686,8 @@ function evaluate(b) {
   const c=b[4].at(-1);
   if (c) score+=c.player===2?5:-5;
   [0,2,6,8].forEach(i=>{ const t=b[i].at(-1); if(t) score+=t.player===2?2:-2; });
+  // Small noise so identical positions don't always evaluate identically
+  score += (Math.random()-0.5)*3;
   return score;
 }
 
@@ -681,17 +697,24 @@ function minimax(b,h,player,depth,alpha,beta,isMax) {
   if (depth===0) return {score:evaluate(b)};
   const moves=getMoves(b,h,player);
   if (!moves.length||isStuckSim(b,h,player)) return {score:evaluate(b)};
-  let best=isMax?-Infinity:Infinity, bestMove=null;
+  let best=isMax?-Infinity:Infinity, bestMoves=[];
   for (const mv of moves){
     const nb=cloneBoard(b), nh=cloneHands(h);
     nb[mv.idx].push({player,size:mv.size});
     const ci=nh[player].findIndex(e=>!e.used&&e.size===mv.size);
     if (ci!==-1) nh[player][ci].used=true;
     const {score}=minimax(nb,nh,player===1?2:1,depth-1,alpha,beta,!isMax);
-    if (isMax&&score>best){best=score;bestMove=mv;alpha=Math.max(alpha,best);}
-    if (!isMax&&score<best){best=score;bestMove=mv;beta=Math.min(beta,best);}
+    if (isMax){
+      if (score>best){best=score;bestMoves=[mv];alpha=Math.max(alpha,best);}
+      else if (score===best) bestMoves.push(mv);
+    } else {
+      if (score<best){best=score;bestMoves=[mv];beta=Math.min(beta,best);}
+      else if (score===best) bestMoves.push(mv);
+    }
     if (beta<=alpha) break;
   }
+  // Pick randomly among equally-good moves for variety
+  const bestMove=bestMoves[Math.floor(Math.random()*bestMoves.length)];
   return {score:best,move:bestMove};
 }
 </script>
