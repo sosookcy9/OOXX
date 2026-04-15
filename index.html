@@ -609,10 +609,35 @@ function canPlace(idx, size, player) {
 }
 
 // ─────────────────────────────────────────
-// HARD AI — Minimax depth 8 + α-β pruning
+// HARD AI — Opening book + Minimax depth 6 + α-β pruning
 // ─────────────────────────────────────────
 function hardAiMove() {
-  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 8, -Infinity, Infinity, true);
+  // Count pieces on board to detect early game
+  const totalPieces = board.reduce((n, s) => n + s.length, 0);
+
+  // Opening book: first move (AI goes first, board empty)
+  if (totalPieces === 0) {
+    // Always take center with largest piece
+    const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
+    return big ? {idx:4, size:big.size} : null;
+  }
+
+  // Second AI move (one piece on board from player): prefer corners, then center
+  if (totalPieces === 1) {
+    const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
+    if (big) {
+      // If center is free, take it; else take a corner
+      const top4 = board[4].at(-1);
+      if (!top4 || big.size > top4.size) return {idx:4, size:big.size};
+      for (const corner of [0,2,6,8]) {
+        const topC = board[corner].at(-1);
+        if (!topC || big.size > topC.size) return {idx:corner, size:big.size};
+      }
+    }
+  }
+
+  // Normal play: use minimax depth 6
+  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 6, -Infinity, Infinity, true);
   return result.move||null;
 }
 
