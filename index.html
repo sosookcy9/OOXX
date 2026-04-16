@@ -94,10 +94,10 @@ body::after {
 #game { justify-content: space-between; padding: 52px 0 44px; }
 
 .player-area {
-  display: flex; flex-direction: row; gap: 4px; padding: 10px 8px;
+  display: flex; flex-direction: row; gap: 28px; padding: 14px 24px;
   background: var(--surface); border: 1.5px solid var(--border-soft);
-  border-radius: 22px; min-height: 80px;
-  align-items: flex-end; justify-content: center;
+  border-radius: 22px; min-height: 100px;
+  align-items: flex-start; justify-content: center;
   width: min(92vw, 360px);
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   transition: border-color 0.3s, box-shadow 0.3s;
@@ -105,36 +105,72 @@ body::after {
 .player-area.p1-turn { border-color: rgba(255,90,71,0.45); box-shadow: 0 2px 14px var(--coral-glow); }
 .player-area.p2-turn { border-color: rgba(91,82,240,0.45); box-shadow: 0 2px 14px var(--indigo-glow); }
 
-/* ── CARD ── */
-.card {
-  width: 33px; height: 58px; border-radius: 9px;
-  background: var(--surface); border: 1.5px solid var(--border-soft);
-  display: flex; justify-content: center; align-items: center;
-  cursor: pointer; position: relative; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
-  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s, border-color 0.28s, opacity 0.28s;
+/* ── STACK ── */
+.card-stack {
+  position: relative; cursor: pointer;
+  width: 52px; flex-shrink: 0;
+  /* height adapts to depth: ghost cards offset downward */
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
 }
-.card::before {
+.card-stack:hover:not(.stack-empty) { transform: translateY(-6px); }
+.card-stack.selected { transform: translateY(-14px) !important; }
+.card-stack.stack-empty { cursor: default; opacity: 0.35; pointer-events: none; }
+
+/* ── GHOST CARDS (pseudo-elements for depth illusion) ── */
+/* Ghost cards sit below the real card, shifted down + slightly inset */
+.card-stack::before,
+.card-stack::after {
   content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 44%;
-  border-radius: 13px 13px 50% 50% / 13px 13px 20px 20px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, transparent 100%);
+  position: absolute; border-radius: 13px;
+  width: 46px; left: 3px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  transition: opacity 0.25s, transform 0.25s;
   pointer-events: none;
 }
-.card:hover:not(.used) { transform: translateY(-9px) scale(1.06); box-shadow: 0 14px 28px rgba(0,0,0,0.14); }
-.card.selected { transform: translateY(-16px) scale(1.1) !important; }
-.card.p1-card  { border-color: rgba(255,90,71,0.22); background: linear-gradient(180deg,#fff 60%,rgba(255,90,71,0.04)); }
-.card.p1-card.selected { border-color: var(--coral) !important; box-shadow: 0 18px 36px var(--coral-glow), 0 0 0 2px var(--coral) !important; }
-.card.p2-card  { border-color: rgba(91,82,240,0.22); background: linear-gradient(180deg,#fff 60%,rgba(91,82,240,0.04)); }
-.card.p2-card.selected { border-color: var(--indigo) !important; box-shadow: 0 18px 36px var(--indigo-glow), 0 0 0 2px var(--indigo) !important; }
-.card.used { opacity: 0.2; pointer-events: none; transform: scale(0.88) !important; box-shadow: none !important; }
+/* Second ghost (furthest back) */
+.card-stack::before {
+  height: 76px; top: 9px; z-index: 0;
+  opacity: 0; /* hidden by default, shown for depth-3 */
+}
+/* First ghost (one step back) */
+.card-stack::after {
+  height: 76px; top: 5px; z-index: 1;
+  opacity: 0; /* hidden by default, shown for depth-2+ */
+}
+.card-stack.depth-2::after  { opacity: 1; }
+.card-stack.depth-3::after  { opacity: 1; }
+.card-stack.depth-3::before { opacity: 1; }
+.card-stack.stack-empty::before,
+.card-stack.stack-empty::after { opacity: 0; }
+
+/* ── CARD (single DOM card per stack) ── */
+.card {
+  width: 52px; height: 76px; border-radius: 13px;
+  background: #fff; border: 1.5px solid var(--border-soft);
+  display: flex; justify-content: center; align-items: center;
+  position: relative; z-index: 2; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  transition: box-shadow 0.28s, border-color 0.28s;
+}
+
+.card.p1-card { border-color: rgba(255,90,71,0.3); }
+.card.p2-card { border-color: rgba(91,82,240,0.3); }
+.card-stack.selected .card.p1-card {
+  border-color: rgba(255,90,71,0.5);
+  box-shadow: 0 6px 20px var(--coral-glow) !important;
+}
+.card-stack.selected .card.p2-card {
+  border-color: rgba(91,82,240,0.5);
+  box-shadow: 0 6px 20px var(--indigo-glow) !important;
+}
 
 .card .piece { border-radius: 50%; flex-shrink: 0; }
 .card .piece.p1 { background: radial-gradient(circle at 35% 30%, var(--coral-light), var(--coral)); box-shadow: 0 3px 10px var(--coral-glow); }
 .card .piece.p2 { background: radial-gradient(circle at 35% 30%, var(--indigo-light), var(--indigo)); box-shadow: 0 3px 10px var(--indigo-glow); }
-.card .size-3 { width: 24px; height: 24px; }
+.card .size-3 { width: 32px; height: 32px; }
 .card .size-2 { width: 16px; height: 16px; }
-.card .size-1 { width: 9px; height: 9px; }
+.card .size-1 { width: 7px; height: 7px; }
 
 /* ── BOARD ── */
 .board-container {
@@ -327,7 +363,7 @@ function backToMenu() {
 function resetGame() {
   currentPlayer = 1; selected = null; gameOver = false;
   board = Array(9).fill(null).map(()=>[]);
-  hands = {1:[],2:[]};
+  hands = {1:[],2:[]}; stacks = {1:{},2:{}}; selected = null;
   document.getElementById("p1-hand").innerHTML = "";
   document.getElementById("p2-hand").innerHTML = "";
   document.querySelectorAll('.cell').forEach(c=>{ c.innerHTML=""; c.classList.remove("can-place"); });
@@ -337,31 +373,60 @@ function resetGame() {
 }
 
 // ── HAND ──
+// stacks[player] = { 3: {stackEl, cardEl, remaining}, 2: {...}, 1: {...} }
+let stacks = {1:{}, 2:{}};
+
 function createHand(player) {
   const el = document.getElementById(`p${player}-hand`);
-  [3,3,3,2,2,2,1,1,1].forEach(size => {
+  stacks[player] = {};
+  const order = player===1 ? [3,2,1] : [1,2,3];
+  order.forEach(size => {
+    const stackEl = document.createElement("div");
+    stackEl.className = "card-stack";
+    // Single card in DOM
     const card = document.createElement("div");
     card.className = `card p${player}-card`;
     const piece = document.createElement("div");
     piece.className = `piece p${player} size-${size}`;
     card.appendChild(piece);
-    const entry = {size, el:card, used:false};
-    hands[player].push(entry);
-    card.onclick = () => onCardClick(player, entry);
-    el.appendChild(card);
+    stackEl.appendChild(card);
+    stackEl.classList.add('depth-3');
+    stacks[player][size] = {stackEl, cardEl: card, remaining: 3};
+    // Also register 3 logical entries in hands[] for AI compatibility
+    for (let i=0; i<3; i++) {
+      hands[player].push({size, used:false, _stack: stacks[player][size]});
+    }
+    stackEl.onclick = () => onStackClick(player, size);
+    el.appendChild(stackEl);
   });
 }
 
-function onCardClick(player, entry) {
-  if (gameOver || entry.used) return;
+function updateStackDepth(player, size) {
+  const s = stacks[player][size];
+  const rem = s.remaining;
+  s.stackEl.classList.remove('depth-1','depth-2','depth-3');
+  if (rem <= 0) {
+    s.stackEl.classList.add('stack-empty');
+  } else {
+    s.stackEl.classList.add(`depth-${Math.min(rem,3)}`);
+    s.stackEl.classList.remove('stack-empty');
+  }
+}
+
+function onStackClick(player, size) {
+  if (gameOver) return;
   if (mode !== "multi" && player !== 1) return;
   if (player !== currentPlayer) return;
-  document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));
+  const s = stacks[player][size];
+  if (s.remaining <= 0) return;
+  document.querySelectorAll('.card-stack').forEach(el=>el.classList.remove('selected'));
   clearHighlights();
-  if (selected === entry) { selected = null; return; }
-  entry.el.classList.add('selected');
-  selected = entry;
-  highlightCells(entry.size);
+  if (selected && selected.size===size && selected.player===player) {
+    selected = null; return;
+  }
+  s.stackEl.classList.add('selected');
+  selected = {size, player};
+  highlightCells(size);
 }
 
 // ── CELL CLICK ──
@@ -370,9 +435,14 @@ document.querySelectorAll('.cell').forEach(cell => {
     if (!selected || gameOver) return;
     const idx = parseInt(cell.dataset.idx);
     if (doPlace(idx, selected.size, currentPlayer)) {
-      selected.used = true;
-      selected.el.classList.remove('selected');
-      selected.el.classList.add('used');
+      // Decrement stack remaining and update depth shadow
+      const s = stacks[currentPlayer][selected.size];
+      s.remaining--;
+      // Mark one logical hand entry as used (for AI/isStuck)
+      const entry = hands[currentPlayer].find(h=>!h.used&&h.size===selected.size);
+      if (entry) entry.used = true;
+      updateStackDepth(currentPlayer, selected.size);
+      document.querySelectorAll('.card-stack').forEach(el=>el.classList.remove('selected'));
       selected = null; clearHighlights();
       afterPlace();
     }
@@ -510,7 +580,10 @@ function aiMove() {
   const entry=hands[2].find(h=>!h.used&&h.size===size);
   if (!entry) { currentPlayer=1; updateTurnUI(); return; }
   doPlace(idx, size, 2);
-  entry.used=true; entry.el.classList.add('used');
+  entry.used=true;
+  const s2 = stacks[2][size];
+  s2.remaining--;
+  updateStackDepth(2, size);
   setTimeout(()=>{
     const wl=getWinLine(board,2);
     if (wl){ drawWinLine(wl,2); setTimeout(()=>showWinner(2),480); return; }
@@ -520,100 +593,82 @@ function aiMove() {
 }
 
 // ─────────────────────────────────────────
-// EASY AI
-// Priority order (each step only if found):
-//   1. Win immediately (100%)
-//   2. Block player's immediate win (100%)
-//   3. Gobble threat — use a larger piece to eat player's piece
-//      on a cell that would give AI 2-in-a-row (50% chance)
-//   4. Random valid move
+// EASY AI — challenging for a child, beatable with focus
+//
+// Mistake model:
+//   1. Win immediately     → 95% (rarely misses)
+//   2. Block player win    → 75% (occasionally slips)
+//   3. Build 2-in-a-row    → 60% chance to try
+//   4. Random valid move   → fallback
+//
+// Uses all piece sizes; no strategic gobbling
 // ─────────────────────────────────────────
 function easyAiMove() {
   const available = hands[2].filter(h=>!h.used);
   if (!available.length) return null;
   const sizes = [...new Set(available.map(h=>h.size))].sort((a,b)=>b-a); // big first
+  const allMoves = [];
+  for (const s of sizes)
+    for (let i=0;i<9;i++)
+      if (canPlace(i,s,2)) allMoves.push({idx:i,size:s});
+  if (!allMoves.length) return null;
+  const rand = () => allMoves[Math.floor(Math.random()*allMoves.length)];
 
-  // 1. Win immediately
-  for (const s of sizes) {
-    for (let i=0;i<9;i++) {
-      if (!canPlace(i,s,2)) continue;
-      board[i].push({player:2,size:s});
-      const win=checkWinFor(board,2);
-      board[i].pop();
-      if (win) return {idx:i,size:s};
+  // 1. Win immediately — misses 5% of the time
+  if (Math.random() < 0.95) {
+    for (const s of sizes) {
+      for (let i=0;i<9;i++) {
+        if (!canPlace(i,s,2)) continue;
+        board[i].push({player:2,size:s});
+        const win=checkWinFor(board,2);
+        board[i].pop();
+        if (win) return {idx:i,size:s};
+      }
     }
   }
 
-  // 2. Block player's immediate win
-  for (const s of sizes) {
-    for (let i=0;i<9;i++) {
-      board[i].push({player:1,size:s});
-      const win=checkWinFor(board,1);
-      board[i].pop();
-      if (win) {
-        if (canPlace(i,s,2)) return {idx:i,size:s};
-        for (const bs of sizes) {
-          if (canPlace(i,bs,2)) return {idx:i,size:bs};
+  // 2. Block player win — always blocks
+  if (true) {
+    for (const s of sizes) {
+      for (let i=0;i<9;i++) {
+        board[i].push({player:1,size:s});
+        const win=checkWinFor(board,1);
+        board[i].pop();
+        if (win) {
+          if (canPlace(i,s,2)) return {idx:i,size:s};
+          for (const bs of sizes)
+            if (canPlace(i,bs,2)) return {idx:i,size:bs};
         }
       }
     }
   }
 
-  // 3. Build 2-in-a-row (always try, not 50%)
-  const buildMoves=[];
-  for (const s of sizes) {
-    for (let i=0;i<9;i++) {
-      if (!canPlace(i,s,2)) continue;
-      board[i].push({player:2,size:s});
-      let threat=0;
-      for (const pat of WIN_PATTERNS) {
-        const tops=pat.map(j=>board[j].at(-1));
-        const ai=tops.filter(x=>x&&x.player===2).length;
-        const p1=tops.filter(x=>x&&x.player===1).length;
-        if (ai===2&&p1===0) threat++;
+  // 3. Build 2-in-a-row — tries 30% of the time
+  if (Math.random() < 0.30) {
+    const buildMoves=[];
+    for (const s of sizes) {
+      for (let i=0;i<9;i++) {
+        if (!canPlace(i,s,2)) continue;
+        board[i].push({player:2,size:s});
+        let threat=0;
+        for (const pat of WIN_PATTERNS) {
+          const tops=pat.map(j=>board[j].at(-1));
+          if (tops.filter(x=>x&&x.player===2).length===2 &&
+              tops.filter(x=>x&&x.player===1).length===0) threat++;
+        }
+        board[i].pop();
+        if (threat>0) buildMoves.push({idx:i,size:s,threat});
       }
-      board[i].pop();
-      if (threat>0) buildMoves.push({idx:i,size:s,threat});
     }
-  }
-  if (buildMoves.length) {
-    buildMoves.sort((a,b)=>b.threat-a.threat);
-    // Pick among top moves (not always best, so player can still win)
-    const top=buildMoves.filter(m=>m.threat===buildMoves[0].threat);
-    return top[Math.floor(Math.random()*top.length)];
+    if (buildMoves.length) {
+      buildMoves.sort((a,b)=>b.threat-a.threat);
+      const top=buildMoves.filter(m=>m.threat===buildMoves[0].threat);
+      return top[Math.floor(Math.random()*top.length)];
+    }
   }
 
-  // 4. Gobble threat: eat a player piece if it helps
-  const gobbleMoves=[];
-  for (const s of sizes) {
-    for (let i=0;i<9;i++) {
-      const top=board[i].at(-1);
-      if (!top||top.player!==1||s<=top.size) continue;
-      board[i].push({player:2,size:s});
-      let threat=0;
-      for (const pat of WIN_PATTERNS) {
-        const tops=pat.map(j=>board[j].at(-1));
-        const ai=tops.filter(x=>x&&x.player===2).length;
-        const p1=tops.filter(x=>x&&x.player===1).length;
-        if (ai===2&&p1===0) threat++;
-      }
-      board[i].pop();
-      if (threat>0) gobbleMoves.push({idx:i,size:s,threat});
-    }
-  }
-  if (gobbleMoves.length) {
-    gobbleMoves.sort((a,b)=>b.threat-a.threat);
-    return gobbleMoves[0];
-  }
-
-  // 5. Random
-  const allMoves=[];
-  for (const s of sizes) {
-    for (let i=0;i<9;i++) {
-      if (canPlace(i,s,2)) allMoves.push({idx:i,size:s});
-    }
-  }
-  return allMoves.length ? allMoves[Math.floor(Math.random()*allMoves.length)] : null;
+  // 4. Fully random
+  return rand();
 }
 
 function canPlace(idx, size, player) {
