@@ -680,33 +680,49 @@ function canPlace(idx, size, player) {
 // HARD AI — Opening book + Minimax depth 6 + α-β pruning
 // ─────────────────────────────────────────
 function hardAiMove() {
-  // Count pieces on board to detect early game
   const totalPieces = board.reduce((n, s) => n + s.length, 0);
+  const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
 
-  // Opening book: first move (AI goes first, board empty)
+  // Opening book: AI goes first — take center with biggest piece
   if (totalPieces === 0) {
-    // Always take center with largest piece
-    const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
     return big ? {idx:4, size:big.size} : null;
   }
 
-  // Second AI move (one piece on board from player): prefer corners, then center
-  if (totalPieces === 1) {
-    const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
-    if (big) {
-      // If center is free, take it; else take a corner
-      const top4 = board[4].at(-1);
-      if (!top4 || big.size > top4.size) return {idx:4, size:big.size};
+  // Opening book: player just moved (totalPieces === 1)
+  if (totalPieces === 1 && big) {
+    const top4 = board[4].at(-1);
+    const playerOnCenter = top4 && top4.player === 1;
+
+    if (playerOnCenter) {
+      // Player took center — counter with a corner using biggest piece
+      // Pick the corner diagonally opposite to give most line coverage
       const corners = [0,2,6,8].sort(()=>Math.random()-0.5);
       for (const corner of corners) {
-        const topC = board[corner].at(-1);
-        if (!topC || big.size > topC.size) return {idx:corner, size:big.size};
+        if (canPlace(corner, big.size, 2)) return {idx:corner, size:big.size};
+      }
+    } else {
+      // Center still open — take it
+      if (canPlace(4, big.size, 2)) return {idx:4, size:big.size};
+      // Center blocked by something we can't cover — take a corner
+      const corners = [0,2,6,8].sort(()=>Math.random()-0.5);
+      for (const corner of corners) {
+        if (canPlace(corner, big.size, 2)) return {idx:corner, size:big.size};
       }
     }
   }
 
-  // Normal play: use minimax depth 6
-  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 6, -Infinity, Infinity, true);
+  // Opening book: player played 2nd move (totalPieces === 3, AI has 1 piece)
+  // If player now has center with large piece, immediately try to gobble or block
+  if (totalPieces === 3 && big) {
+    const top4 = board[4].at(-1);
+    if (top4 && top4.player === 1 && big.size > top4.size) {
+      // Gobble the center — huge strategic win
+      return {idx:4, size:big.size};
+    }
+  }
+
+  // Normal play: minimax depth 7
+  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 7, -Infinity, Infinity, true);
   return result.move||null;
 }
 
@@ -731,18 +747,41 @@ function isStuckSim(b,h,player) {
 
 function evaluate(b) {
   let score=0;
+
   for (const p of WIN_PATTERNS){
     const tops=p.map(i=>b[i].at(-1));
     const n2=tops.filter(x=>x&&x.player===2).length;
     const n1=tops.filter(x=>x&&x.player===1).length;
-    if (n1===0) score+=n2===3?1000:n2===2?15:n2===1?2:0;
-    if (n2===0) score-=n1===3?1000:n1===2?15:n1===1?2:0;
+    // Weight by average piece size in the pattern (big pieces = harder to dislodge)
+    const sz2=tops.filter(x=>x&&x.player===2).reduce((a,x)=>a+x.size,0);
+    const sz1=tops.filter(x=>x&&x.player===1).reduce((a,x)=>a+x.size,0);
+    if (n1===0) score += n2===2 ? 15+sz2*4 : n2===1 ? 2+sz2 : 0;
+    if (n2===0) score -= n1===2 ? 15+sz1*4 : n1===1 ? 2+sz1 : 0;
   }
+
+  // Center: heavily penalise opponent large piece there (controls 4 lines)
   const c=b[4].at(-1);
-  if (c) score+=c.player===2?5:-5;
-  [0,2,6,8].forEach(i=>{ const t=b[i].at(-1); if(t) score+=t.player===2?2:-2; });
-  // Small noise so identical positions don't always evaluate identically
-  score += (Math.random()-0.5)*3;
+  if (c) {
+    const val = c.size * 8; // size-3 = 24pts, size-2 = 16pts, size-1 = 8pts
+    score += c.player===2 ? val : -val;
+  }
+
+  // Corners: moderate bonus scaled by piece size
+  [0,2,6,8].forEach(i=>{
+    const t=b[i].at(-1);
+    if (t) score += t.player===2 ? t.size*2 : -t.size*2;
+  });
+
+  // Penalise having small pieces buried under opponent (wasted resource)
+  for (let i=0;i<9;i++){
+    const stack=b[i];
+    for (let j=0;j<stack.length-1;j++){
+      if (stack[j].player===2) score-=stack[j].size*2;
+      if (stack[j].player===1) score+=stack[j].size*2;
+    }
+  }
+
+  score += (Math.random()-0.5)*2;
   return score;
 }
 
