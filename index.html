@@ -677,52 +677,73 @@ function canPlace(idx, size, player) {
 }
 
 // ─────────────────────────────────────────
-// HARD AI — Opening book + Minimax depth 6 + α-β pruning
+// HARD AI — Opening book + Minimax depth 9 + α-β pruning
 // ─────────────────────────────────────────
 function hardAiMove() {
   const totalPieces = board.reduce((n, s) => n + s.length, 0);
-  const big = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size)[0];
+  const avail = hands[2].filter(h=>!h.used).sort((a,b)=>b.size-a.size);
+  const big = avail[0];
+  const sizes = [...new Set(avail.map(h=>h.size))];
 
-  // Opening book: AI goes first — take center with biggest piece
+  // ── Opening book ──────────────────────────────────────────
   if (totalPieces === 0) {
     return big ? {idx:4, size:big.size} : null;
   }
 
-  // Opening book: player just moved (totalPieces === 1)
   if (totalPieces === 1 && big) {
     const top4 = board[4].at(-1);
-    const playerOnCenter = top4 && top4.player === 1;
-
-    if (playerOnCenter) {
-      // Player took center — counter with a corner using biggest piece
-      // Pick the corner diagonally opposite to give most line coverage
+    if (top4 && top4.player === 1) {
+      // Player took center — gobble if possible, else take corner
+      if (big.size > top4.size) return {idx:4, size:big.size};
       const corners = [0,2,6,8].sort(()=>Math.random()-0.5);
-      for (const corner of corners) {
-        if (canPlace(corner, big.size, 2)) return {idx:corner, size:big.size};
-      }
+      for (const c of corners) if (canPlace(c, big.size, 2)) return {idx:c, size:big.size};
     } else {
-      // Center still open — take it
       if (canPlace(4, big.size, 2)) return {idx:4, size:big.size};
-      // Center blocked by something we can't cover — take a corner
       const corners = [0,2,6,8].sort(()=>Math.random()-0.5);
-      for (const corner of corners) {
-        if (canPlace(corner, big.size, 2)) return {idx:corner, size:big.size};
-      }
+      for (const c of corners) if (canPlace(c, big.size, 2)) return {idx:c, size:big.size};
     }
   }
 
-  // Opening book: player played 2nd move (totalPieces === 3, AI has 1 piece)
-  // If player now has center with large piece, immediately try to gobble or block
+  // Player chose edge on move 2 — fork with two corners
+  if (totalPieces === 2 && big) {
+    const edges = [1,3,5,7];
+    const playerEdge = edges.find(i => { const t=board[i].at(-1); return t&&t.player===1; });
+    if (playerEdge !== undefined) {
+      const forkMap = {1:[6,8],3:[2,8],5:[0,6],7:[0,2]};
+      for (const c of forkMap[playerEdge]) if (canPlace(c, big.size, 2)) return {idx:c, size:big.size};
+    }
+  }
+
+  // Gobble center if player just took it
   if (totalPieces === 3 && big) {
     const top4 = board[4].at(-1);
-    if (top4 && top4.player === 1 && big.size > top4.size) {
-      // Gobble the center — huge strategic win
-      return {idx:4, size:big.size};
+    if (top4 && top4.player === 1 && big.size > top4.size) return {idx:4, size:big.size};
+  }
+
+  // Instant win check (before expensive minimax)
+  for (const s of sizes) {
+    for (let i=0;i<9;i++) {
+      if (!canPlace(i,s,2)) continue;
+      board[i].push({player:2,size:s});
+      const win=checkWinFor(board,2);
+      board[i].pop();
+      if (win) return {idx:i,size:s};
     }
   }
 
-  // Normal play: minimax depth 7
-  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 7, -Infinity, Infinity, true);
+  // Instant block check
+  for (const s of sizes) {
+    for (let i=0;i<9;i++) {
+      if (!canPlace(i,s,2)) continue;
+      board[i].push({player:1,size:s});
+      const win=checkWinFor(board,1);
+      board[i].pop();
+      if (win) return {idx:i,size:s};
+    }
+  }
+
+  // Normal play: minimax depth 9
+  const result=minimax(cloneBoard(board), cloneHands(hands), 2, 9, -Infinity, Infinity, true);
   return result.move||null;
 }
 
@@ -748,40 +769,62 @@ function isStuckSim(b,h,player) {
 function evaluate(b) {
   let score=0;
 
+  // ── Pattern scoring (weighted by piece size = harder to dislodge) ──
   for (const p of WIN_PATTERNS){
     const tops=p.map(i=>b[i].at(-1));
     const n2=tops.filter(x=>x&&x.player===2).length;
     const n1=tops.filter(x=>x&&x.player===1).length;
-    // Weight by average piece size in the pattern (big pieces = harder to dislodge)
     const sz2=tops.filter(x=>x&&x.player===2).reduce((a,x)=>a+x.size,0);
     const sz1=tops.filter(x=>x&&x.player===1).reduce((a,x)=>a+x.size,0);
-    if (n1===0) score += n2===2 ? 15+sz2*4 : n2===1 ? 2+sz2 : 0;
-    if (n2===0) score -= n1===2 ? 15+sz1*4 : n1===1 ? 2+sz1 : 0;
+    if (n1===0) score += n2===2 ? 20+sz2*5 : n2===1 ? 3+sz2 : 0;
+    if (n2===0) score -= n1===2 ? 20+sz1*5 : n1===1 ? 3+sz1 : 0;
   }
 
-  // Center: heavily penalise opponent large piece there (controls 4 lines)
+  // ── Fork / double-threat detection ──
+  let aiThreats=0, p1Threats=0;
+  for (const p of WIN_PATTERNS){
+    const tops=p.map(i=>b[i].at(-1));
+    const n2=tops.filter(x=>x&&x.player===2).length;
+    const n1=tops.filter(x=>x&&x.player===1).length;
+    const empty=tops.filter(x=>!x).length;
+    if (n2===2 && n1===0 && empty===1) aiThreats++;
+    if (n1===2 && n2===0 && empty===1) p1Threats++;
+  }
+  if (aiThreats>=2) score += 90;   // fork — virtually unblockable
+  if (p1Threats>=2) score -= 90;
+
+  // ── Gobble threat: bonus for being able to capture opponent pieces ──
+  for (let i=0;i<9;i++){
+    const top=b[i].at(-1);
+    if (top && top.player===1) score += top.size * 3;
+  }
+
+  // ── Center control ──
   const c=b[4].at(-1);
-  if (c) {
-    const val = c.size * 8; // size-3 = 24pts, size-2 = 16pts, size-1 = 8pts
-    score += c.player===2 ? val : -val;
-  }
+  if (c) score += c.player===2 ? c.size*10 : -c.size*10;
 
-  // Corners: moderate bonus scaled by piece size
+  // ── Corner control ──
   [0,2,6,8].forEach(i=>{
     const t=b[i].at(-1);
-    if (t) score += t.player===2 ? t.size*2 : -t.size*2;
+    if (t) score += t.player===2 ? t.size*3 : -t.size*3;
   });
 
-  // Penalise having small pieces buried under opponent (wasted resource)
+  // ── Edge (less valuable) ──
+  [1,3,5,7].forEach(i=>{
+    const t=b[i].at(-1);
+    if (t) score += t.player===2 ? t.size : -t.size;
+  });
+
+  // ── Buried pieces penalty ──
   for (let i=0;i<9;i++){
     const stack=b[i];
     for (let j=0;j<stack.length-1;j++){
-      if (stack[j].player===2) score-=stack[j].size*2;
-      if (stack[j].player===1) score+=stack[j].size*2;
+      if (stack[j].player===2) score-=stack[j].size*3;
+      if (stack[j].player===1) score+=stack[j].size*3;
     }
   }
 
-  score += (Math.random()-0.5)*2;
+  score += (Math.random()-0.5)*1.5;
   return score;
 }
 
